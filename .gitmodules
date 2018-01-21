@@ -1,0 +1,3 @@
+[submodule "librtcdcpp"]
+	path = librtcdcpp
+	url = https://github.com/paullouisageneau/librtcdcpp.git

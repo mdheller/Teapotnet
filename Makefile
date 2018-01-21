@@ -5,10 +5,10 @@ TPROOT=/var/lib/teapotnet
 CC=$(CROSS)gcc
 CXX=$(CROSS)g++
 RM=rm -f
-CCFLAGS=-O3 -fno-var-tracking
-CPPFLAGS=-std=c++11 -Wall -Wno-sign-compare -O3 -fno-var-tracking
-LDFLAGS=
-LDLIBS=-lpthread -ldl -lnettle -lhogweed -lgmp -lgnutls -largon2
+CCFLAGS=-O2 -fno-var-tracking
+CPPFLAGS=-pthread -std=c++14 -Wall -Wno-sign-compare -O2 -fno-var-tracking
+LDFLAGS=-pthread
+LDLIBS=-ldl -lnettle -lhogweed -lgmp -lgnutls -largon2
 
 SRCS=$(shell printf "%s " pla/*.cpp tpn/*.cpp)
 OBJS=$(subst .cpp,.o,$(SRCS))
@@ -23,8 +23,11 @@ include/sqlite3.o: include/sqlite3.c
 
 -include $(subst .o,.d,$(OBJS))
 
-teapotnet: $(OBJS) include/sqlite3.o
-	$(CXX) $(LDFLAGS) -o teapotnet $(OBJS) include/sqlite3.o $(LDLIBS)
+teapotnet: librtcdcpp/librtcdcpp.a $(OBJS) include/sqlite3.o
+	$(CXX) $(LDFLAGS) -o teapotnet $(OBJS) include/sqlite3.o librtcdcpp/librtcdcpp.a $(LDLIBS)
+
+librtcdcpp/librtcdcpp.a: 
+	cd librtcdcpp && $(MAKE)
 
 clean:
 	$(RM) include/*.o pla/*.o pla/*.d tpn/*.o tpn/*.d
