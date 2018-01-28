@@ -52,7 +52,7 @@ public:
 		void clear(void);
 		bool extractRange(int64_t &rangeBegin, int64_t &rangeEnd, int64_t contentLength = -1) const;
 
-		String protocol;		// HTTP or HTTPS
+		String protocol;		// HTTP, HTTPS, WS, WSS...
 		String method;			// GET, POST, HEAD...
 		String version;			// 1.0 or 1.1
 		String url;				// URL without host and parameters
@@ -93,10 +93,10 @@ public:
 		virtual ~Server(void);
 
 		virtual void process(Http::Request &request) = 0;
-		virtual void generate(Stream &out, int code, const String &message);
 
 	protected:
 		virtual void handle(Stream *stream, const Address &remote);
+		virtual void generate(Stream &out, int code, const String &message);
 		virtual void respondWithFile(const Request &request, const String &fileName);
 
 		ServerSocket mSock;
@@ -119,12 +119,14 @@ public:
 		SecureTransportServer::Credentials *mCredentials;
 	};
 
+	static String ParseUrl(const String &url, String &protocol, String &host);
+	static Stream *Connect(const String &url, bool noproxy = false);
 	static int Action(const String &method, const String &url, const String &data, const StringMap &headers, Stream *output = NULL, StringMap *responseHeaders = NULL, StringMap *cookies = NULL, int maxRedirections = 5, bool noproxy = false);
 	static int Get(const String &url, Stream *output = NULL, StringMap *cookies = NULL, int maxRedirections = 5, bool noproxy = false);
 	static int Post(const String &url, const StringMap &post, Stream *output = NULL, StringMap *cookies = NULL, int maxRedirections = 5, bool noproxy = false);
 	static int Post(const String &url, const String &data, const String &type, Stream *output = NULL, StringMap *cookies = NULL, int maxRedirections = 5, bool noproxy = false);
 	static String AppendParam(const String &url, const String &name, const String &value = "1");
-
+	
 private:
 	Http(void);
 };

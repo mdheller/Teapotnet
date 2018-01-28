@@ -53,6 +53,7 @@ public:
 	virtual size_t readData(char *buffer, size_t size) = 0;
 	virtual void writeData(const char *data, size_t size) = 0;
 	virtual bool waitData(duration timeout);
+	virtual void setTimeout(duration timeout);
 	virtual void seekRead(int64_t position);
 	virtual void seekWrite(int64_t position);
 	virtual int64_t tellRead(void) const;
@@ -205,11 +206,13 @@ private:
 	template<typename T> bool readStd(T &val);
 	template<typename T> void writeStd(const T &val);
 
-	virtual Stream *pipeIn(void);	// return the write end for a pipe
-
 	uint16_t fixEndianess(uint16_t n);
 	uint32_t fixEndianess(uint32_t n);
 	uint64_t fixEndianess(uint64_t n);
+	
+	// Dirty flag so Http class can mark usage of a proxy
+	bool mHttpHasProxy = false;
+	friend class Http;
 };
 
 // NB: String is not defined here, as it herits from Stream.

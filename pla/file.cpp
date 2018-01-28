@@ -307,20 +307,6 @@ bool File::skipMark(void)
 	return false;
 }
 
-Stream *File::pipeIn(void)
-{
-	// Somehow using Append here can result in a write failure
-	try {
-		File *file = new File(mName, ReadWrite);
-		file->seekWrite(size());
-		return file;
-	}
-	catch(...)
-	{
-		return NULL;
-	}
-}
-
 SafeWriteFile::SafeWriteFile(void)
 {
 

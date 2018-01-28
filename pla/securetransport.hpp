@@ -110,11 +110,13 @@ public:
 	bool hasCertificate(void) const;
 	String getPrivateSharedKeyHint(void) const;	// only valid on client-side
 
+	// Stream
 	size_t readData(char *buffer, size_t size);
 	void writeData(const char *data, size_t size);
 	// TODO: waitData
 	bool nextRead(void);
 	bool nextWrite(void);
+	void setTimeout(duration timeout);
 	bool isDatagram(void) const;
 
 	struct Verifier

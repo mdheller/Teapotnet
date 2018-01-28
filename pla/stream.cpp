@@ -67,6 +67,11 @@ bool Stream::nextWrite(void)
 	return false;	// no sub-streams
 }
 
+void Stream::setTimeout(duration timeout)
+{
+	// do nothing
+}
+
 void Stream::clear(void)
 {
 	char buffer[BufferSize];
@@ -367,8 +372,7 @@ void Stream::write(const std::string &s)
 
 void Stream::write(bool b)
 {
-	if(b) write("true");
-	else write("false");
+	write(b ? "true" : "false");
 }
 
 void Stream::write(const BinaryString &str)
@@ -575,11 +579,6 @@ void Stream::writeZero(size_t size)
 		writeData(buffer,len);
 		size-= len;
 	}
-}
-
-Stream *Stream::pipeIn(void)
-{
-	return this;
 }
 
 uint16_t Stream::fixEndianess(uint16_t n)

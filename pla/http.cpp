@@ -39,32 +39,14 @@ Http::Request::Request(void)
 
 Http::Request::~Request(void)
 {
-	clear();
+
 }
 
 Http::Request::Request(const String &url, const String &method)
 {
 	clear();
-
-	int p = url.find("://");
-	if(p == String::NotFound) this->url = url;
-	else {
-		protocol = url.substr(0,p);
-		protocol = protocol.toUpper();
-		if(protocol != "HTTP" && protocol != "HTTPS")
-			throw Exception(String("Unknown protocol in URL: ")+protocol);
-
-		String host(url.substr(p+3));
-		this->url = String('/') + host.cut('/');
-
-		if(host.contains('@'))
-			throw Unsupported("HTTP authentication");
-
-		headers["Host"] = host;
-	}
-
-	if(!method.empty()) this->method = method.toUpper();
-
+	this->url = ParseUrl(url, this->protocol, this->headers["Host"]);
+	this->method = method.toUpper();
 	this->headers["User-Agent"] = UserAgent;
 	this->headers["Accept-Charset"] = "utf-8";	// force UTF-8
 }
@@ -80,7 +62,9 @@ void Http::Request::send(Stream *stream)
 	//if(!headers.contains("Accept-Encoding"))
 	//	headers["Accept-Encoding"] = "identity";
 
-	String completeUrl(url);
+	String completeUrl;
+	if(stream->mHttpHasProxy) completeUrl = protocol.toLower()+"://"+headers["Host"]+url;
+	else completeUrl = url;
 	if(!get.empty())
 	{
 		if(completeUrl.find('?') == String::NotFound)
@@ -520,6 +504,7 @@ void Http::Response::send(Stream *stream)
 		switch(code)
 		{
 		case 100: message = "Continue";				break;
+		case 101: message = "Switching Protocols";	break;
 		case 200: message = "OK";					break;
 		case 204: message = "No content";			break;
 		case 206: message = "Partial Content";		break;
@@ -646,15 +631,6 @@ Http::Server::~Server(void)
 	mPool.join();
 }
 
-void Http::Server::generate(Stream &out, int code, const String &message)
-{
-	out<<"<!DOCTYPE html>\n";
-	out<<"<html>\n";
-	out<<"<head><title>"<<message<<"</title></head>\n";
-	out<<"<body><h1>"<<code<<" "<<message<<"</h1></body>\n";
-	out<<"</html>\n";
-}
-
 void Http::Server::handle(Stream *stream, const Address &remote)
 {
 	Request request;
@@ -690,9 +666,18 @@ void Http::Server::handle(Stream *stream, const Address &remote)
 		}
 		catch(...)
 		{
-
+			// Don't care
 		}
 	}
+}
+
+void Http::Server::generate(Stream &out, int code, const String &message)
+{
+	out<<"<!DOCTYPE html>\n";
+	out<<"<html>\n";
+	out<<"<head><title>"<<message<<"</title></head>\n";
+	out<<"<body><h1>"<<code<<" "<<message<<"</h1></body>\n";
+	out<<"</html>\n";
 }
 
 void Http::Server::respondWithFile(const Request &request, const String &fileName)
@@ -850,20 +835,30 @@ void Http::SecureServer::handle(Stream *stream, const Address &remote)
 	delete transport;
 }
 
-int Http::Action(const String &method, const String &url, const String &data, const StringMap &headers, Stream *output, StringMap *responseHeaders, StringMap *cookies, int maxRedirections, bool noproxy)
+String Http::ParseUrl(const String &url, String &protocol, String &host)
 {
-	Request request(url, method);
-	request.headers.insert(headers);
+	int p = url.find("://");
+	if(p == String::NotFound) return url;
+	else {
+		protocol = url.substr(0, p);
+		protocol = protocol.toUpper();
+		if(protocol != "HTTP" && protocol != "HTTPS" && protocol != "WS" && protocol != "WSS")
+			throw Exception(String("Unknown protocol in URL: ")+protocol);
 
-	String host;
-	if(!request.headers.get("Host", host))
+		host = url.substr(p+3);
+		if(host.contains('@'))
+			throw Unsupported("HTTP authentication");
+		
+		return String('/') + host.cut('/');
+	}
+}
+
+Stream *Http::Connect(const String &url, bool noproxy)
+{
+	String protocol, host;
+	ParseUrl(url, protocol, host);
+	if(host.empty())
 		throw Exception("Invalid URL");
-
-	if(!data.empty())
-		request.headers["Content-Length"] = String::number(data.size());
-
-	if(cookies)
-		request.cookies = *cookies;
 
 	Socket *sock = new Socket;
 	try {
@@ -876,13 +871,13 @@ int Http::Action(const String &method, const String &url, const String &data, co
 			try {
 				sock->connect(proxyAddr, true);	// Connect without proxy
 
-				if(request.protocol == "HTTP")
+				if(protocol != "HTTP")
 				{
-					request.url = url;              // Full URL for proxy
+					sock->mHttpHasProxy = true;
 				}
-				else {	// HTTPS
+				else {	// HTTPS or WS/WSS
 					String connectHost = host;
-					if(!connectHost.contains(':')) connectHost+= ":443";
+					if(!connectHost.contains(':') && protocol != "WS") connectHost+= ":443";
 					Http::Request connectRequest(connectHost, "CONNECT");
 					connectRequest.version = "1.1";
 					connectRequest.headers["Host"] = connectHost;
@@ -907,7 +902,7 @@ int Http::Action(const String &method, const String &url, const String &data, co
 		}
 		else {
 			List<Address> addrs;
-			if(!Address::Resolve(host, addrs, request.protocol.toLower()))
+			if(!Address::Resolve(host, addrs, protocol.toLower()))
 				throw NetException("Unable to resolve: " + host);
 
 			for(List<Address>::iterator it = addrs.begin(); it != addrs.end(); ++it)
@@ -932,11 +927,27 @@ int Http::Action(const String &method, const String &url, const String &data, co
 		throw;
 	}
 
-	Stream *stream = sock;
-	try {
-		if(request.protocol == "HTTPS")
-			stream = new SecureTransportClient(sock, new SecureTransportClient::Certificate, host);
+	if(protocol == "HTTP" || protocol == "WS")
+		return sock;
+	
+	Stream *stream = new SecureTransportClient(sock, new SecureTransportClient::Certificate, host);
+	stream->mHttpHasProxy = sock->mHttpHasProxy;
+	return stream;
+}
 
+int Http::Action(const String &method, const String &url, const String &data, const StringMap &headers, Stream *output, StringMap *responseHeaders, StringMap *cookies, int maxRedirections, bool noproxy)
+{
+	Stream *stream = Connect(url, noproxy);
+	try {
+		Request request(url, method);
+		request.headers.insert(headers);
+
+		if(!data.empty())
+			request.headers["Content-Length"] = String::number(data.size());
+
+		if(cookies)
+			request.cookies = *cookies;
+	
 		request.send(stream);
 		if(!data.empty())
 			stream->write(data);
@@ -959,7 +970,7 @@ int Http::Action(const String &method, const String &url, const String &data, co
 				// Handle relative location even if not RFC-compliant
 				if(!location.contains(":/"))
 				{
-					if(location[0] == '/') location = request.protocol.toLower() + "://" + host + location;
+					if(location[0] == '/') location = request.protocol.toLower() + "://" + request.headers["Host"] + location;
 					else {
 						int p = url.lastIndexOf('/');
 						Assert(p > 0);

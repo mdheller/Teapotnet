@@ -343,6 +343,11 @@ bool SecureTransport::nextWrite(void)
 	return true;
 }
 
+void SecureTransport::setTimeout(duration timeout)
+{
+	mStream->setTimeout(timeout);
+}
+
 bool SecureTransport::isDatagram(void) const
 {
 	return mStream->isDatagram();
